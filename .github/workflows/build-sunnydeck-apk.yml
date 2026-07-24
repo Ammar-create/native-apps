@@ -1,0 +1,49 @@
+name: Build SunnyDeck APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: sunnydeck/package.json
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: |
+          cd sunnydeck
+          npm install --legacy-peer-deps
+
+      - name: Expo Prebuild (Generate Native Android Project)
+        run: |
+          cd sunnydeck
+          npx expo prebuild --platform android
+
+      - name: Build Release APK
+        run: |
+          cd sunnydeck/android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SunnyDeck-Release-APK
+          path: sunnydeck/android/app/build/outputs/apk/release/*.apk
