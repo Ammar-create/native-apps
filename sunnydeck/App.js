@@ -30,8 +30,8 @@ const DEFAULT_CHARACTERS = [
 const DEFAULT_SETTINGS = {
   aquaKey: '',
   groqKey: '',
-  routerModel: 'aqua:llama-3.3-70b-instruct',
-  chatModel: 'aqua:llama-3.3-70b-instruct'
+  routerModel: 'aqua:deepseek-v4',
+  chatModel: 'aqua:deepseek-v4'
 };
 
 const PROVIDERS = {
@@ -41,7 +41,7 @@ const PROVIDERS = {
 
 function parseModel(str) {
   const i = (str || '').indexOf(':');
-  if (i === -1) return { provider: 'aqua', model: str || 'llama-3.3-70b-instruct' };
+  if (i === -1) return { provider: 'aqua', model: str || 'deepseek-v4' };
   return { provider: str.slice(0, i).trim().toLowerCase(), model: str.slice(i + 1).trim() };
 }
 
