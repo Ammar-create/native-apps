@@ -30,8 +30,10 @@ const DEFAULT_CHARACTERS = [
 const DEFAULT_SETTINGS = {
   aquaKey: '',
   groqKey: '',
-  routerModel: 'aqua:deepseek-v4',
-  chatModel: 'aqua:deepseek-v4'
+  // Use a currently listed Aqua text model. Older saved installs may still have
+  // invalid/renamed IDs, so loaded settings are normalized below.
+  routerModel: 'aqua:agnes',
+  chatModel: 'aqua:agnes'
 };
 
 const PROVIDERS = {
@@ -39,10 +41,70 @@ const PROVIDERS = {
   groq: { base: 'https://api.groq.com/openai/v1', keyName: 'groqKey' }
 };
 
+const AQUA_TEXT_MODELS = new Set([
+  'agnes', 'gpt-5-nano', 'gemini-3', 'nova', 'gpt-oss', 'glm-5.2',
+  'deepseek-v3.2', 'kimi-k2.6', 'qwen', 'mistral', 'mistral-3.5',
+  'step-3.7', 'qwen-3.7', 'deepseek-v4', 'deepseek-v4-pro',
+  'gemini-3.1-lite', 'gemini-3.5', 'nemotron', 'llama-3.1',
+  'minimax-m3', 'gemma-4', 'mimo-v2.5', 'mimo-v2.5-pro', 'grok-4.3',
+  'mercury', 'diffusion-gemma', 'kimi-k2.7', 'kimi-k3', 'haiku-4.5',
+  'gpt-5.4', 'grok-4.5', 'gpt-5.4-mini', 'gemini-3.1-pro',
+  'gemini-3.6', 'sonnet-4.6', 'sonnet-5', 'opus-4.7', 'opus-4.8',
+  'opus-5', 'fable-5', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-terra',
+  'gpt-5.6-sol', 'sonar'
+]);
+
+const LEGACY_AQUA_MODEL_ALIASES = {
+  'deepseek-v4-flash': 'deepseek-v4',
+  'deepseek-v4-pro-flash': 'deepseek-v4-pro',
+  'deepseek v4': 'deepseek-v4',
+  'deepseek-v3': 'deepseek-v3.2',
+  'gpt-5': 'gpt-5-nano',
+  'gpt5-nano': 'gpt-5-nano'
+};
+
+function normalizeAquaModel(model) {
+  const cleaned = String(model || '').trim().toLowerCase().replace(/\s+/g, '-');
+  const aliased = LEGACY_AQUA_MODEL_ALIASES[cleaned] || cleaned;
+  return AQUA_TEXT_MODELS.has(aliased) ? aliased : 'agnes';
+}
+
 function parseModel(str) {
-  const i = (str || '').indexOf(':');
-  if (i === -1) return { provider: 'aqua', model: str || 'deepseek-v4' };
-  return { provider: str.slice(0, i).trim().toLowerCase(), model: str.slice(i + 1).trim() };
+  const raw = str || DEFAULT_SETTINGS.chatModel;
+  const i = raw.indexOf(':');
+  const provider = i === -1 ? 'aqua' : raw.slice(0, i).trim().toLowerCase();
+  const model = i === -1 ? raw : raw.slice(i + 1).trim();
+
+  if (provider === 'aqua') {
+    return { provider: 'aqua', model: normalizeAquaModel(model) };
+  }
+
+  return { provider, model: model || 'llama-3.1-8b-instant' };
+}
+
+function sanitizeSettings(value) {
+  const merged = { ...DEFAULT_SETTINGS, ...(value || {}) };
+  const router = parseModel(merged.routerModel);
+  const chat = parseModel(merged.chatModel);
+
+  return {
+    ...merged,
+    routerModel: `${router.provider}:${router.model}`,
+    chatModel: `${chat.provider}:${chat.model}`
+  };
+}
+
+async function readApiError(res) {
+  try {
+    const data = await res.json();
+    return data?.error?.message || data?.message || JSON.stringify(data);
+  } catch (e) {
+    try {
+      return await res.text();
+    } catch (_e) {
+      return '';
+    }
+  }
 }
 
 export default function App() {
@@ -72,10 +134,14 @@ export default function App() {
     try {
       const saved = await AsyncStorage.getItem('sunny_settings');
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = sanitizeSettings(JSON.parse(saved));
         setSettings(parsed);
         setTempAquaKey(parsed.aquaKey || '');
         setTempGroqKey(parsed.groqKey || '');
+
+        // Persist normalized model IDs so old installs stop sending invalid
+        // models that cause Aqua API 400 responses.
+        await AsyncStorage.setItem('sunny_settings', JSON.stringify(parsed));
       }
     } catch (e) {
       console.warn('Failed to load settings', e);
@@ -83,7 +149,7 @@ export default function App() {
   };
 
   const saveSettings = async () => {
-    const updated = { ...settings, aquaKey: tempAquaKey, groqKey: tempGroqKey };
+    const updated = sanitizeSettings({ ...settings, aquaKey: tempAquaKey.trim(), groqKey: tempGroqKey.trim() });
     setSettings(updated);
     try {
       await AsyncStorage.setItem('sunny_settings', JSON.stringify(updated));
@@ -120,6 +186,10 @@ export default function App() {
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 })
       });
+      if (!res.ok) {
+        console.warn('Router API fallback', res.status, await readApiError(res));
+        return [candidates[Math.floor(Math.random() * candidates.length)]];
+      }
       const data = await res.json();
       const m = data.choices?.[0]?.message?.content?.match(/\{[\s\S]*\}/);
       if (m) {
@@ -161,9 +231,15 @@ export default function App() {
       })
     });
 
-    if (!res.ok) throw new Error(`API Error ${res.status}`);
+    if (!res.ok) {
+      const details = await readApiError(res);
+      throw new Error(`API Error ${res.status}${details ? `: ${details}` : ''}`);
+    }
+
     const data = await res.json();
-    return data.choices[0].message.content.trim();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error('API returned an empty response');
+    return content.trim();
   };
 
   const handleSend = async () => {
