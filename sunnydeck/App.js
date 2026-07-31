@@ -1,525 +1,194 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  StatusBar,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert
-} from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, SafeAreaView, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Header from './src/components/Header';
+import { ChatInput, MessageList, TargetBar } from './src/components/ChatView';
+import { CrewModal, SessionsModal, SettingsModal } from './src/components/Modals';
+import { DEFAULT_SETTINGS, STORAGE_KEYS } from './src/constants/config';
+import { getAiCrew, getCharacter, STRAW_HAT_CREW } from './src/data/characters';
+import { requestChatCompletion } from './src/utils/api';
+import { sanitizeSettings } from './src/utils/models';
+import { createSession, titleFromMessage } from './src/utils/sessions';
+import styles from './src/styles';
 
-// Default Premade Realm: Thousand Sunny
-const DEFAULT_CHARACTERS = [
-  { key: 'luffy', name: 'Monkey D. Luffy', role: 'Captain', avatar: '🍖', description: 'Energetic, optimistic, loves meat and adventure.', personality: 'Impulsive, carefree, loyal, direct.' },
-  { key: 'zoro', name: 'Roronoa Zoro', role: 'Swordsman', avatar: '⚔️', description: 'Master swordsman, loves sake and napping.', personality: 'Stoic, stern, terrible direction sense, protective.' },
-  { key: 'nami', name: 'Nami', role: 'Navigator', avatar: '🍊', description: 'Brilliant navigator, loves money and tangerines.', personality: 'Sharp-witted, practical, bossy when crew gets chaotic.' },
-  { key: 'usopp', name: 'Usopp', role: 'Sniper', avatar: '🎯', description: 'Master inventor and storyteller.', personality: 'Dramatic, creative, easily scared, heroic when counts.' },
-  { key: 'sanji', name: 'Sanji', role: 'Cook', avatar: '🍳', description: 'Master chef, chivalrous to a fault.', personality: 'Passionate, refined cook, protective, stylish.' },
-  { key: 'chopper', name: 'Tony Tony Chopper', role: 'Doctor', avatar: '🌸', description: 'Reindeer doctor who loves sweet treats.', personality: 'Cute, earnest, easily flattered, caring.' }
-];
+const VALID_IDENTITIES = ['guest', ...STRAW_HAT_CREW.map(character => character.key)];
 
-const DEFAULT_SETTINGS = {
-  aquaKey: '',
-  groqKey: '',
-  // Use a currently listed Aqua text model. Older saved installs may still have
-  // invalid/renamed IDs, so loaded settings are normalized below.
-  routerModel: 'aqua:agnes',
-  chatModel: 'aqua:agnes'
-};
-
-const PROVIDERS = {
-  aqua: { base: 'https://api.aquadevs.com/v1', keyName: 'aquaKey' },
-  groq: { base: 'https://api.groq.com/openai/v1', keyName: 'groqKey' }
-};
-
-const AQUA_TEXT_MODELS = new Set([
-  'agnes', 'gpt-5-nano', 'gemini-3', 'nova', 'gpt-oss', 'glm-5.2',
-  'deepseek-v3.2', 'kimi-k2.6', 'qwen', 'mistral', 'mistral-3.5',
-  'step-3.7', 'qwen-3.7', 'deepseek-v4', 'deepseek-v4-pro',
-  'gemini-3.1-lite', 'gemini-3.5', 'nemotron', 'llama-3.1',
-  'minimax-m3', 'gemma-4', 'mimo-v2.5', 'mimo-v2.5-pro', 'grok-4.3',
-  'mercury', 'diffusion-gemma', 'kimi-k2.7', 'kimi-k3', 'haiku-4.5',
-  'gpt-5.4', 'grok-4.5', 'gpt-5.4-mini', 'gemini-3.1-pro',
-  'gemini-3.6', 'sonnet-4.6', 'sonnet-5', 'opus-4.7', 'opus-4.8',
-  'opus-5', 'fable-5', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-terra',
-  'gpt-5.6-sol', 'sonar'
-]);
-
-const LEGACY_AQUA_MODEL_ALIASES = {
-  'deepseek-v4-flash': 'deepseek-v4',
-  'deepseek-v4-pro-flash': 'deepseek-v4-pro',
-  'deepseek v4': 'deepseek-v4',
-  'deepseek-v3': 'deepseek-v3.2',
-  'gpt-5': 'gpt-5-nano',
-  'gpt5-nano': 'gpt-5-nano'
-};
-
-function normalizeAquaModel(model) {
-  const cleaned = String(model || '').trim().toLowerCase().replace(/\s+/g, '-');
-  const aliased = LEGACY_AQUA_MODEL_ALIASES[cleaned] || cleaned;
-  return AQUA_TEXT_MODELS.has(aliased) ? aliased : 'agnes';
-}
-
-function parseModel(str) {
-  const raw = str || DEFAULT_SETTINGS.chatModel;
-  const i = raw.indexOf(':');
-  const provider = i === -1 ? 'aqua' : raw.slice(0, i).trim().toLowerCase();
-  const model = i === -1 ? raw : raw.slice(i + 1).trim();
-
-  if (provider === 'aqua') {
-    return { provider: 'aqua', model: normalizeAquaModel(model) };
-  }
-
-  return { provider, model: model || 'llama-3.1-8b-instant' };
-}
-
-function sanitizeSettings(value) {
-  const merged = { ...DEFAULT_SETTINGS, ...(value || {}) };
-  const router = parseModel(merged.routerModel);
-  const chat = parseModel(merged.chatModel);
-
-  return {
-    ...merged,
-    routerModel: `${router.provider}:${router.model}`,
-    chatModel: `${chat.provider}:${chat.model}`
-  };
-}
-
-async function readApiError(res) {
+function parseRouterResponse(content, candidates) {
+  const match = String(content || '').match(/\{[\s\S]*\}/);
+  if (!match) return [];
   try {
-    const data = await res.json();
-    return data?.error?.message || data?.message || JSON.stringify(data);
-  } catch (e) {
-    try {
-      return await res.text();
-    } catch (_e) {
-      return '';
-    }
+    const parsed = JSON.parse(match[0]);
+    return [...new Set((parsed.responders || []).map(value => String(value).toLowerCase().trim()))]
+      .filter(key => candidates.includes(key))
+      .slice(0, 2);
+  } catch (_error) {
+    return [];
   }
 }
 
 export default function App() {
-  const [messages, setMessages] = useState([
-    { id: '1', kind: 'system', speaker: 'SYSTEM', text: 'SUNNY DECK // RETRO MOBILE INITIALIZED. Welcome aboard the Thousand Sunny.', timestamp: Date.now() }
-  ]);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isShout, setIsShout] = useState(false);
   const [targetChar, setTargetChar] = useState(null);
   const [isBusy, setIsBusy] = useState(false);
   const [typingName, setTypingName] = useState(null);
-  
-  // Settings & Modal
   const [settingsModal, setSettingsModal] = useState(false);
-  const [charModal, setCharModal] = useState(false);
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [tempAquaKey, setTempAquaKey] = useState('');
-  const [tempGroqKey, setTempGroqKey] = useState('');
-
+  const [sessionsModal, setSessionsModal] = useState(false);
+  const [crewModal, setCrewModal] = useState(false);
   const flatListRef = useRef(null);
 
+  const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
+  const messages = activeSession?.messages || [];
+  const baseIdentity = getCharacter(settings.playAsCharacterKey);
+  const identity = settings.playAsCharacterKey === 'guest' ? { ...baseIdentity, name: settings.guestName, shortName: settings.guestName } : baseIdentity;
+  const aiCrew = useMemo(() => getAiCrew(settings.playAsCharacterKey), [settings.playAsCharacterKey]);
+
   useEffect(() => {
-    loadSettings();
+    async function initialize() {
+      try {
+        const [savedSettings, savedSessions, savedActive] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.settings),
+          AsyncStorage.getItem(STORAGE_KEYS.sessions),
+          AsyncStorage.getItem(STORAGE_KEYS.activeSessionId)
+        ]);
+        const cleanSettings = sanitizeSettings(savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS, VALID_IDENTITIES);
+        let nextSessions = savedSessions ? JSON.parse(savedSessions) : [];
+        if (!Array.isArray(nextSessions) || !nextSessions.length) nextSessions = [createSession()];
+        const nextActive = nextSessions.some(session => session.id === savedActive) ? savedActive : nextSessions[0].id;
+        setSettings(cleanSettings); setSessions(nextSessions); setActiveSessionId(nextActive);
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(cleanSettings)),
+          AsyncStorage.setItem(STORAGE_KEYS.sessions, JSON.stringify(nextSessions)),
+          AsyncStorage.setItem(STORAGE_KEYS.activeSessionId, nextActive)
+        ]);
+      } catch (error) {
+        console.warn('Initialization failed', error);
+        const session = createSession(); setSessions([session]); setActiveSessionId(session.id);
+      } finally { setLoaded(true); }
+    }
+    initialize();
   }, []);
 
-  const loadSettings = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('sunny_settings');
-      if (saved) {
-        const parsed = sanitizeSettings(JSON.parse(saved));
-        setSettings(parsed);
-        setTempAquaKey(parsed.aquaKey || '');
-        setTempGroqKey(parsed.groqKey || '');
-
-        // Persist normalized model IDs so old installs stop sending invalid
-        // models that cause Aqua API 400 responses.
-        await AsyncStorage.setItem('sunny_settings', JSON.stringify(parsed));
-      }
-    } catch (e) {
-      console.warn('Failed to load settings', e);
-    }
+  const commitSessions = async (nextSessions, nextActiveId = activeSessionId) => {
+    setSessions(nextSessions); setActiveSessionId(nextActiveId);
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.sessions, JSON.stringify(nextSessions)),
+      AsyncStorage.setItem(STORAGE_KEYS.activeSessionId, nextActiveId)
+    ]);
   };
 
-  const saveSettings = async () => {
-    const updated = sanitizeSettings({ ...settings, aquaKey: tempAquaKey.trim(), groqKey: tempGroqKey.trim() });
-    setSettings(updated);
-    try {
-      await AsyncStorage.setItem('sunny_settings', JSON.stringify(updated));
-      setSettingsModal(false);
-      Alert.alert('Settings Saved', 'API keys updated successfully.');
-    } catch (e) {
-      Alert.alert('Error', 'Could not save settings.');
-    }
-  };
-
-  // Chat Router logic via Aqua API
-  const pickResponders = async (text) => {
-    if (targetChar) {
-      return [targetChar.key];
-    }
-    const candidates = DEFAULT_CHARACTERS.map(c => c.key);
-    
-    if (!settings.aquaKey) {
-      return [candidates[Math.floor(Math.random() * candidates.length)]];
-    }
-
-    const { provider, model } = parseModel(settings.routerModel);
-    const p = PROVIDERS[provider] || PROVIDERS.aqua;
-    const key = settings[p.keyName] || settings.aquaKey;
-
-    if (!key) return [candidates[0]];
-
-    const charSummary = DEFAULT_CHARACTERS.map(c => `${c.key} (${c.name}, ${c.role})`).join('; ');
-    const prompt = `You are the scene router on the Thousand Sunny deck.\nMessage from Player: "${text}"\nCharacters present: ${charSummary}\nDecide who naturally responds (1 or 2 keys).\nOutput ONLY JSON: {"responders":["key1"]}\nOptions: ${candidates.join(', ')}`;
-
-    try {
-      const res = await fetch(`${p.base}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 60, temperature: 0 })
+  const updateActiveMessages = updater => {
+    const now = Date.now();
+    setSessions(current => {
+      const next = current.map(session => {
+        if (session.id !== activeSessionId) return session;
+        const nextMessages = typeof updater === 'function' ? updater(session.messages || []) : updater;
+        return { ...session, messages: nextMessages, updatedAt: now };
       });
-      if (!res.ok) {
-        console.warn('Router API fallback', res.status, await readApiError(res));
-        return [candidates[Math.floor(Math.random() * candidates.length)]];
-      }
-      const data = await res.json();
-      const m = data.choices?.[0]?.message?.content?.match(/\{[\s\S]*\}/);
-      if (m) {
-        const parsed = JSON.parse(m[0]);
-        const picks = (parsed.responders || []).map(n => String(n).toLowerCase().trim()).filter(n => candidates.includes(n));
-        if (picks.length) return picks;
-      }
-    } catch (e) {
-      console.warn('Router fallback', e);
-    }
-    return [candidates[Math.floor(Math.random() * candidates.length)]];
+      AsyncStorage.setItem(STORAGE_KEYS.sessions, JSON.stringify(next)).catch(error => console.warn('Session save failed', error));
+      return next;
+    });
   };
 
-  // Character response generator
-  const getCharacterReply = async (charKey, userText, alreadyReplied) => {
-    const c = DEFAULT_CHARACTERS.find(x => x.key === charKey);
-    const { provider, model } = parseModel(settings.chatModel);
-    const p = PROVIDERS[provider] || PROVIDERS.aqua;
-    const key = settings[p.keyName] || settings.aquaKey;
+  const startNewSession = async () => {
+    if (isBusy) return Alert.alert('Please Wait', 'Finish the current response before changing sessions.');
+    const session = createSession();
+    await commitSessions([session, ...sessions], session.id);
+    setTargetChar(null); setInputText(''); setSessionsModal(false);
+  };
 
-    if (!key) {
-      return `(Add your Aqua API Key in Settings to enable live AI responses!) Hi, I'm ${c.name}!`;
-    }
+  const switchSession = async sessionId => {
+    if (isBusy) return Alert.alert('Please Wait', 'Finish the current response before changing sessions.');
+    setActiveSessionId(sessionId); setTargetChar(null); setInputText(''); setSessionsModal(false);
+    await AsyncStorage.setItem(STORAGE_KEYS.activeSessionId, sessionId);
+  };
 
-    const repliedNote = alreadyReplied.length ? `\nOthers who just spoke: ${alreadyReplied.join(', ')}. React naturally.` : '';
-    const sys = `You are ${c.name} (${c.role}) on the Thousand Sunny. ${c.description}. Personality: ${c.personality}.${repliedNote}\nRULES:\n- SPOKEN DIALOGUE ONLY. No asterisks, no actions.\n- Stay fully in character. 1-3 short sentences.\n- Never mention being an AI.`;
+  const deleteSession = async sessionId => {
+    if (isBusy) return;
+    let next = sessions.filter(session => session.id !== sessionId);
+    if (!next.length) next = [createSession()];
+    const nextActive = sessionId === activeSessionId ? next[0].id : activeSessionId;
+    await commitSessions(next, nextActive);
+  };
 
-    const res = await fetch(`${p.base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: sys },
-          { role: 'user', content: `Player says: "${userText}"` }
-        ],
-        temperature: 0.85,
-        max_tokens: 150
-      })
-    });
+  const saveSettings = async draft => {
+    try {
+      const clean = sanitizeSettings(draft, VALID_IDENTITIES);
+      setSettings(clean); setTargetChar(current => current?.key === clean.playAsCharacterKey ? null : current);
+      await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(clean));
+      setSettingsModal(false); Alert.alert('Settings Saved', 'Identity, model assignments, and API keys were updated.');
+    } catch (_error) { Alert.alert('Error', 'Could not save settings.'); }
+  };
 
-    if (!res.ok) {
-      const details = await readApiError(res);
-      throw new Error(`API Error ${res.status}${details ? `: ${details}` : ''}`);
-    }
+  const selectPlayAs = async key => {
+    const clean = sanitizeSettings({ ...settings, playAsCharacterKey: key }, VALID_IDENTITIES);
+    setSettings(clean); setTargetChar(current => current?.key === key ? null : current);
+    await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(clean));
+  };
 
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error('API returned an empty response');
-    return content.trim();
+  const pickResponders = async text => {
+    if (targetChar) return [targetChar.key];
+    const candidates = aiCrew.map(character => character.key);
+    if (!candidates.length) return [];
+    const fallback = [candidates[Math.floor(Math.random() * candidates.length)]];
+    const summary = aiCrew.map(character => `${character.key} (${character.name}, ${character.role})`).join('; ');
+    const prompt = `You route a roleplay scene on the Thousand Sunny.\nThe human controls: ${identity.name} (${identity.role}). Never select that character.\nTheir dialogue: "${text}"\nAI-controlled characters: ${summary}\nChoose the 1 or 2 characters who would respond most naturally. Output ONLY JSON: {"responders":["key1"]}\nValid keys: ${candidates.join(', ')}`;
+    try {
+      const content = await requestChatCompletion({ settings, modelSetting: settings.routerModel, messages: [{ role: 'user', content: prompt }], temperature: 0, maxTokens: 80 });
+      const parsed = parseRouterResponse(content, candidates);
+      return parsed.length ? parsed : fallback;
+    } catch (error) { console.warn('Router fallback:', error.message); return fallback; }
+  };
+
+  const getCharacterReply = async (character, userText, alreadyReplied) => {
+    const recentContext = messages.filter(message => message.kind === 'dialogue').slice(-8).map(message => `${message.speaker}: ${message.text}`).join('\n');
+    const system = `You are ${character.name}, the ${character.role} of the Straw Hat crew aboard the Thousand Sunny. ${character.description} Personality: ${character.personality}\nThe human controls ${identity.name}${settings.playAsCharacterKey === 'guest' ? ' as a guest' : `, the ${identity.role}`}. Never speak, act, decide, or narrate for the human-controlled identity.\nRules: spoken dialogue only; no asterisks or narration; stay fully in character; use 1–3 short sentences; never mention AI.${alreadyReplied.length ? ` Others who just replied: ${alreadyReplied.join(', ')}.` : ''}`;
+    const user = `${recentContext ? `Recent conversation:\n${recentContext}\n` : ''}${identity.name} says${targetChar ? ` to ${targetChar.name}` : ''}: "${userText}"`;
+    return requestChatCompletion({ settings, modelSetting: settings.chatModel, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.85, maxTokens: 170 });
   };
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || isBusy) return;
-
-    setInputText('');
-    setIsBusy(true);
-
-    const userMsg = {
-      id: Date.now().toString(),
-      kind: 'dialogue',
-      speaker: 'Player',
-      isPlayer: true,
-      text: text,
-      shout: isShout,
-      target: targetChar ? targetChar.name : null,
-      timestamp: Date.now()
-    };
-
-    setMessages(prev => [...prev, userMsg]);
+    if (!text || isBusy || !activeSession) return;
+    setInputText(''); setIsBusy(true);
+    const userMessage = { id: `msg_${Date.now()}_user`, kind: 'dialogue', speaker: identity.name, role: identity.role, avatar: identity.avatar, characterKey: identity.key, isPlayer: true, text, shout: isShout, target: targetChar?.name || null, timestamp: Date.now() };
     setIsShout(false);
+    setSessions(current => {
+      const next = current.map(session => session.id !== activeSessionId ? session : { ...session, title: session.title === 'New Deck Chat' ? titleFromMessage(text) : session.title, updatedAt: Date.now(), messages: [...session.messages, userMessage] });
+      AsyncStorage.setItem(STORAGE_KEYS.sessions, JSON.stringify(next)).catch(console.warn); return next;
+    });
 
     try {
-      const responders = await pickResponders(text);
-      const already = [];
-
-      for (const rKey of responders) {
-        const c = DEFAULT_CHARACTERS.find(x => x.key === rKey);
-        if (!c) continue;
-
-        setTypingName(c.name);
-        // Simulate realistic typing delay
-        await new Promise(r => setTimeout(r, 600));
-
-        let reply = '';
-        try {
-          reply = await getCharacterReply(rKey, text, already);
-        } catch (e) {
-          reply = `[Error generating response: ${e.message}]`;
-        } finally {
-          setTypingName(null);
-        }
-
-        const charMsg = {
-          id: (Date.now() + Math.random()).toString(),
-          kind: 'dialogue',
-          speaker: c.name,
-          avatar: c.avatar,
-          isPlayer: false,
-          text: reply,
-          timestamp: Date.now()
-        };
-
-        setMessages(prev => [...prev, charMsg]);
-        already.push(c.name);
+      const responders = await pickResponders(text); const already = [];
+      for (const key of responders) {
+        const character = STRAW_HAT_CREW.find(member => member.key === key); if (!character) continue;
+        setTypingName(character.name); await new Promise(resolve => setTimeout(resolve, 450));
+        let reply;
+        try { reply = await getCharacterReply(character, text, already); }
+        catch (error) { reply = `[Response error: ${error.message}]`; }
+        finally { setTypingName(null); }
+        updateActiveMessages(current => [...current, { id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`, kind: 'dialogue', speaker: character.name, role: character.role, avatar: character.avatar, characterKey: character.key, isPlayer: false, text: reply, timestamp: Date.now() }]);
+        already.push(character.name);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsBusy(false);
-    }
+    } finally { setTypingName(null); setIsBusy(false); }
   };
 
-  const renderItem = ({ item }) => {
-    if (item.kind === 'system') {
-      return (
-        <View style={styles.systemBubble}>
-          <Text style={styles.systemText}>⚡ {item.text}</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.msgContainer, item.isPlayer ? styles.playerAlign : styles.charAlign]}>
-        {!item.isPlayer && (
-          <View style={styles.avatarBadge}>
-            <Text style={styles.avatarText}>{item.avatar || '🏴‍☠️'}</Text>
-          </View>
-        )}
-        <View style={[styles.bubble, item.isPlayer ? styles.playerBubble : styles.charBubble]}>
-          <View style={styles.msgHeader}>
-            <Text style={styles.speakerName}>{item.speaker}</Text>
-            {item.shout && <Text style={styles.tagBadge}>📢 SHOUT</Text>}
-            {item.target && <Text style={styles.tagBadge}>👉 @{item.target}</Text>}
-          </View>
-          <Text style={styles.msgText}>{item.text}</Text>
-        </View>
-      </View>
-    );
-  };
+  if (!loaded) return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="light-content" backgroundColor="#0d0b09" /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#0d0b09" />
-
-      {/* Retro Top Bar */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>SUNNY DECK // RETRO</Text>
-          <Text style={styles.headerSubtitle}>THOUSAND SUNNY REALM</Text>
-        </View>
-        <TouchableOpacity style={styles.settingsBtn} onPress={() => setSettingsModal(true)}>
-          <Text style={styles.settingsBtnText}>⚙️ KEYS</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Target Selector Ribbon */}
-      <View style={styles.targetBar}>
-        <Text style={styles.targetLabel}>TARGET:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[styles.targetChip, !targetChar && styles.targetChipActive]}
-            onPress={() => setTargetChar(null)}
-          >
-            <Text style={[styles.chipText, !targetChar && styles.chipTextActive]}>ALL CREW</Text>
-          </TouchableOpacity>
-          {DEFAULT_CHARACTERS.map(c => (
-            <TouchableOpacity
-              key={c.key}
-              style={[styles.targetChip, targetChar?.key === c.key && styles.targetChipActive]}
-              onPress={() => setTargetChar(targetChar?.key === c.key ? null : c)}
-            >
-              <Text style={[styles.chipText, targetChar?.key === c.key && styles.chipTextActive]}>
-                {c.avatar} {c.name.split(' ')[0]}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-      />
-
-      {/* Typing Indicator */}
-      {typingName && (
-        <View style={styles.typingContainer}>
-          <ActivityIndicator size="small" color="#f5a623" />
-          <Text style={styles.typingText}>{typingName.toUpperCase()} IS TYPING...</Text>
-        </View>
-      )}
-
-      {/* Bottom Input Area */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.inputContainer}>
-          <TouchableOpacity
-            style={[styles.shoutBtn, isShout && styles.shoutBtnActive]}
-            onPress={() => setIsShout(!isShout)}
-          >
-            <Text style={[styles.shoutText, isShout && styles.shoutTextActive]}>📢</Text>
-          </TouchableOpacity>
-
-          <TextInput
-            style={styles.input}
-            placeholder={targetChar ? `Speak to ${targetChar.name}...` : "Speak on deck..."}
-            placeholderTextColor="#665544"
-            value={inputText}
-            onChangeText={setInputText}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-          />
-
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={isBusy}>
-            <Text style={styles.sendBtnText}>SEND</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Settings Modal */}
-      <Modal visible={settingsModal} animationType="slide" transparent>
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>⚙️ API CONFIGURATION</Text>
-            
-            <Text style={styles.inputLabel}>AQUA API KEY (CHAT & ROUTER):</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Paste Aqua API key..."
-              placeholderTextColor="#665544"
-              value={tempAquaKey}
-              onChangeText={setTempAquaKey}
-              secureTextEntry
-            />
-
-            <Text style={styles.inputLabel}>GROQ API KEY (SPEECH/AUDIO):</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Paste Groq API key..."
-              placeholderTextColor="#665544"
-              value={tempGroqKey}
-              onChangeText={setTempGroqKey}
-              secureTextEntry
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setSettingsModal(false)}>
-                <Text style={styles.modalCancelText}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveSettings}>
-                <Text style={styles.modalSaveText}>SAVE KEYS</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <Header identity={identity} onNew={startNewSession} onSessions={() => setSessionsModal(true)} onCrew={() => setCrewModal(true)} onSettings={() => setSettingsModal(true)} />
+      <TargetBar characters={aiCrew} target={targetChar} onSelect={setTargetChar} />
+      <MessageList messages={messages} typingName={typingName} listRef={flatListRef} />
+      <ChatInput identity={identity} target={targetChar} inputText={inputText} onChangeText={setInputText} isShout={isShout} onToggleShout={() => setIsShout(value => !value)} isBusy={isBusy} onSend={handleSend} />
+      <SettingsModal visible={settingsModal} settings={settings} onClose={() => setSettingsModal(false)} onSave={saveSettings} />
+      <SessionsModal visible={sessionsModal} sessions={sessions} activeSessionId={activeSessionId} onClose={() => setSessionsModal(false)} onNew={startNewSession} onSwitch={switchSession} onDelete={deleteSession} />
+      <CrewModal visible={crewModal} playAsCharacterKey={settings.playAsCharacterKey} onPlayAs={selectPlayAs} onClose={() => setCrewModal(false)} />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0d0b09' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2a2015',
-    backgroundColor: '#14100c'
-  },
-  headerTitle: { color: '#f5a623', fontSize: 16, fontWeight: 'bold', letterSpacing: 1.2 },
-  headerSubtitle: { color: '#8c7355', fontSize: 10, letterSpacing: 1 },
-  settingsBtn: { borderBottomWidth: 1, borderBottomColor: '#f5a623', paddingVertical: 4 },
-  settingsBtnText: { color: '#f5a623', fontSize: 12, fontWeight: 'bold' },
-
-  targetBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#110d0a', borderBottomWidth: 1, borderBottomColor: '#221a12' },
-  targetLabel: { color: '#8c7355', fontSize: 10, fontWeight: 'bold', marginRight: 8 },
-  targetChip: { backgroundColor: '#1a140f', borderWidth: 1, borderColor: '#33271a', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 5, marginRight: 6 },
-  targetChipActive: { backgroundColor: '#f5a623', borderColor: '#f5a623' },
-  chipText: { color: '#a68b68', fontSize: 11, fontWeight: 'bold' },
-  chipTextActive: { color: '#0d0b09' },
-
-  listContent: { padding: 12 },
-  systemBubble: { backgroundColor: '#1c1610', borderWidth: 1, borderColor: '#3a2e1e', borderRadius: 6, padding: 10, marginVertical: 6, alignItems: 'center' },
-  systemText: { color: '#d4af37', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-
-  msgContainer: { flexDirection: 'row', marginVertical: 6, maxWidth: '85%' },
-  playerAlign: { alignSelf: 'flex-end' },
-  charAlign: { alignSelf: 'flex-start' },
-  avatarBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#261e16', borderWidth: 1, borderColor: '#4a3a28', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  avatarText: { fontSize: 16 },
-
-  bubble: { borderRadius: 8, padding: 10, borderWidth: 1 },
-  playerBubble: { backgroundColor: '#261c0e', borderColor: '#59401f' },
-  charBubble: { backgroundColor: '#16120e', borderColor: '#33281c' },
-
-  msgHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  speakerName: { color: '#f5a623', fontSize: 11, fontWeight: 'bold', marginRight: 6 },
-  tagBadge: { color: '#e67e22', fontSize: 9, fontWeight: 'bold', marginRight: 4 },
-  msgText: { color: '#e6dacb', fontSize: 14, lineHeight: 19 },
-
-  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6 },
-  typingText: { color: '#f5a623', fontSize: 11, marginLeft: 8, fontWeight: 'bold' },
-
-  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#14100c', borderTopWidth: 1, borderTopColor: '#2a2015' },
-  shoutBtn: { padding: 8, borderWidth: 1, borderColor: '#3a2e1e', borderRadius: 6, marginRight: 8, backgroundColor: '#1a140f' },
-  shoutBtnActive: { backgroundColor: '#e67e22', borderColor: '#e67e22' },
-  shoutText: { fontSize: 16 },
-  shoutTextActive: { opacity: 1 },
-
-  input: { flex: 1, backgroundColor: '#0d0b09', borderWidth: 1, borderColor: '#33271a', borderRadius: 6, color: '#f5a623', paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
-  sendBtn: { backgroundColor: '#f5a623', borderRadius: 6, paddingHorizontal: 16, paddingVertical: 10, marginLeft: 8 },
-  sendBtnText: { color: '#0d0b09', fontSize: 12, fontWeight: 'bold' },
-
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#16120e', borderWidth: 1, borderColor: '#4a3a28', borderRadius: 8, padding: 20 },
-  modalTitle: { color: '#f5a623', fontSize: 16, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  inputLabel: { color: '#a68b68', fontSize: 11, fontWeight: 'bold', marginTop: 10, marginBottom: 4 },
-  modalInput: { backgroundColor: '#0d0b09', borderWidth: 1, borderColor: '#33271a', borderRadius: 6, color: '#f5a623', paddingHorizontal: 12, paddingVertical: 8, fontSize: 13 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20 },
-  modalCancelBtn: { paddingHorizontal: 16, paddingVertical: 10, marginRight: 10 },
-  modalCancelText: { color: '#8c7355', fontSize: 12, fontWeight: 'bold' },
-  modalSaveBtn: { backgroundColor: '#f5a623', borderRadius: 6, paddingHorizontal: 16, paddingVertical: 10 },
-  modalSaveText: { color: '#0d0b09', fontSize: 12, fontWeight: 'bold' }
-});
