@@ -1,14 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StatusBar } from 'react-native';
+import { SafeAreaView, StatusBar, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Header from './src/components/Header';
+import FeedbackProvider, { useFeedback } from './src/components/Feedback';
+import TopBar from './src/components/TopBar';
+import BottomNav from './src/components/BottomNav';
 import { ChatInput, MessageList, TargetBar } from './src/components/ChatView';
-import { CrewModal, SessionsModal, SettingsModal } from './src/components/Modals';
+import SettingsScreen from './src/components/SettingsScreen';
+import SessionsDrawer from './src/components/SessionsDrawer';
 import { DEFAULT_SETTINGS, STORAGE_KEYS } from './src/constants/config';
 import { getAiCrew, getCharacter, STRAW_HAT_CREW } from './src/data/characters';
 import { requestChatCompletion } from './src/utils/api';
 import { sanitizeSettings } from './src/utils/models';
 import { createSession, titleFromMessage } from './src/utils/sessions';
+import { useSunnyDeckFonts } from './src/fonts';
 import styles from './src/styles';
 
 const VALID_IDENTITIES = ['guest', ...STRAW_HAT_CREW.map(character => character.key)];
@@ -26,20 +30,21 @@ function parseRouterResponse(content, candidates) {
   }
 }
 
-export default function App() {
+function AppContent() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState('deck');
   const [inputText, setInputText] = useState('');
   const [isShout, setIsShout] = useState(false);
   const [targetChar, setTargetChar] = useState(null);
   const [isBusy, setIsBusy] = useState(false);
   const [typingName, setTypingName] = useState(null);
-  const [settingsModal, setSettingsModal] = useState(false);
-  const [sessionsModal, setSessionsModal] = useState(false);
-  const [crewModal, setCrewModal] = useState(false);
+  const [sessionsDrawer, setSessionsDrawer] = useState(false);
   const flatListRef = useRef(null);
+  const { fontsLoaded } = useSunnyDeckFonts();
+  const { showToast } = useFeedback();
 
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const messages = activeSession?.messages || [];
@@ -95,15 +100,15 @@ export default function App() {
   };
 
   const startNewSession = async () => {
-    if (isBusy) return Alert.alert('Please Wait', 'Finish the current response before changing sessions.');
+    if (isBusy) return showToast('Finish the current response before changing sessions.', 'warning');
     const session = createSession();
     await commitSessions([session, ...sessions], session.id);
-    setTargetChar(null); setInputText(''); setSessionsModal(false);
+    setTargetChar(null); setInputText(''); setSessionsDrawer(false);
   };
 
   const switchSession = async sessionId => {
-    if (isBusy) return Alert.alert('Please Wait', 'Finish the current response before changing sessions.');
-    setActiveSessionId(sessionId); setTargetChar(null); setInputText(''); setSessionsModal(false);
+    if (isBusy) return showToast('Finish the current response before changing sessions.', 'warning');
+    setActiveSessionId(sessionId); setTargetChar(null); setInputText(''); setSessionsDrawer(false);
     await AsyncStorage.setItem(STORAGE_KEYS.activeSessionId, sessionId);
   };
 
@@ -120,14 +125,8 @@ export default function App() {
       const clean = sanitizeSettings(draft, VALID_IDENTITIES);
       setSettings(clean); setTargetChar(current => current?.key === clean.playAsCharacterKey ? null : current);
       await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(clean));
-      setSettingsModal(false); Alert.alert('Settings Saved', 'Identity, model assignments, and API keys were updated.');
-    } catch (_error) { Alert.alert('Error', 'Could not save settings.'); }
-  };
-
-  const selectPlayAs = async key => {
-    const clean = sanitizeSettings({ ...settings, playAsCharacterKey: key }, VALID_IDENTITIES);
-    setSettings(clean); setTargetChar(current => current?.key === key ? null : current);
-    await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(clean));
+      showToast('Settings saved successfully.', 'success');
+    } catch (_error) { showToast('Could not save settings.', 'error'); }
   };
 
   const pickResponders = async text => {
@@ -177,18 +176,33 @@ export default function App() {
     } finally { setTypingName(null); setIsBusy(false); }
   };
 
-  if (!loaded) return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="light-content" backgroundColor="#0d0b09" /></SafeAreaView>;
+  if (!loaded || !fontsLoaded) return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="light-content" backgroundColor="#13121c" /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0b09" />
-      <Header identity={identity} onNew={startNewSession} onSessions={() => setSessionsModal(true)} onCrew={() => setCrewModal(true)} onSettings={() => setSettingsModal(true)} />
-      <TargetBar characters={aiCrew} target={targetChar} onSelect={setTargetChar} />
-      <MessageList messages={messages} typingName={typingName} listRef={flatListRef} />
-      <ChatInput identity={identity} target={targetChar} inputText={inputText} onChangeText={setInputText} isShout={isShout} onToggleShout={() => setIsShout(value => !value)} isBusy={isBusy} onSend={handleSend} />
-      <SettingsModal visible={settingsModal} settings={settings} onClose={() => setSettingsModal(false)} onSave={saveSettings} />
-      <SessionsModal visible={sessionsModal} sessions={sessions} activeSessionId={activeSessionId} onClose={() => setSessionsModal(false)} onNew={startNewSession} onSwitch={switchSession} onDelete={deleteSession} />
-      <CrewModal visible={crewModal} playAsCharacterKey={settings.playAsCharacterKey} onPlayAs={selectPlayAs} onClose={() => setCrewModal(false)} />
+      <StatusBar barStyle="light-content" backgroundColor="#13121c" />
+      {activeTab === 'deck' ? (
+        <>
+          <TopBar identity={identity} onNew={startNewSession} onSessions={() => setSessionsDrawer(true)} onSettings={() => setActiveTab('settings')} />
+          <TargetBar characters={aiCrew} target={targetChar} onSelect={setTargetChar} />
+          <View style={{ flex: 1 }}>
+            <MessageList messages={messages} typingName={typingName} listRef={flatListRef} />
+          </View>
+          <ChatInput identity={identity} target={targetChar} inputText={inputText} onChangeText={setInputText} isShout={isShout} onToggleShout={() => setIsShout(value => !value)} isBusy={isBusy} onSend={handleSend} />
+        </>
+      ) : (
+        <SettingsScreen visible={activeTab === 'settings'} settings={settings} onSave={saveSettings} onClose={() => setActiveTab('deck')} />
+      )}
+      <BottomNav active={activeTab} onChange={setActiveTab} />
+      <SessionsDrawer visible={sessionsDrawer} sessions={sessions} activeSessionId={activeSessionId} onClose={() => setSessionsDrawer(false)} onNew={startNewSession} onSwitch={switchSession} onDelete={deleteSession} />
     </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <FeedbackProvider>
+      <AppContent />
+    </FeedbackProvider>
   );
 }

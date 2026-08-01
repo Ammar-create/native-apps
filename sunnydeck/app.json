@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0d0b09",
+    "backgroundColor": "#13121c",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#0d0b09"
+      "backgroundColor": "#13121c"
     },
     "android": {
       "package": "com.sunnydeck.nativeapp"
