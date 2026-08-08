@@ -62,41 +62,36 @@ function Message({ item }) {
 }
 
 function TargetChip({ active, characterKey, label, isGroup, onPress }) {
-  const checkAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const activeAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.timing(checkAnim, {
+    Animated.spring(activeAnim, {
       toValue: active ? 1 : 0,
-      duration: 180,
-      useNativeDriver: false,
+      stiffness: 300,
+      damping: 24,
+      useNativeDriver: true,
     }).start();
   }, [active]);
 
-  const checkWidth = checkAnim.interpolate({
+  const iconScale = activeAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 20],
-  });
-  const checkScale = checkAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.5, 1],
+    outputRange: [1, 1.15],
   });
 
   return (
     <MotionPressable
-      activeScale={0.96}
+      activeScale={0.94}
       style={[styles.targetChip, active && styles.targetChipActive]}
       onPress={onPress}
     >
-      <Animated.View
-        style={[
-          styles.targetCheckSlot,
-          { width: checkWidth, opacity: checkAnim, transform: [{ scale: checkScale }] },
-        ]}
-      >
-        <MaterialIcons name={isGroup ? 'group' : 'check'} size={15} color="#8ac3ba" />
+      <Animated.View style={{ transform: [{ scale: iconScale }], flexDirection: 'row', alignItems: 'center' }}>
+        {isGroup ? (
+          <MaterialIcons name="group" size={16} color={active ? '#574b7e' : '#cac4d0'} style={{ marginRight: 6 }} />
+        ) : (
+          <CharacterIcon characterKey={characterKey} size={16} color={active ? '#574b7e' : undefined} style={{ marginRight: 6 }} />
+        )}
+        <Text style={[styles.targetChipText, active && styles.targetChipTextActive]}>{label}</Text>
       </Animated.View>
-      {!isGroup ? <CharacterIcon characterKey={characterKey} size={16} color={active ? '#574b7e' : undefined} /> : null}
-      <Text style={[styles.targetChipText, active && styles.targetChipTextActive]}>{label}</Text>
     </MotionPressable>
   );
 }

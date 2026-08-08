@@ -7,47 +7,90 @@ import { GUEST_CHARACTER, STRAW_HAT_CREW } from '../data/characters';
 import styles from '../styles';
 
 function IdentityTile({ character, active, onPress }) {
-  const badgeAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const activeAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.spring(badgeAnim, {
+    Animated.spring(activeAnim, {
       toValue: active ? 1 : 0,
-      friction: 7,
-      tension: 260,
-      useNativeDriver: true,
+      stiffness: 240,
+      damping: 22,
+      useNativeDriver: false,
     }).start();
   }, [active]);
 
-  const badgeScale = badgeAnim.interpolate({
+  const iconScale = activeAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.8, 1],
+    outputRange: [1, 1.18],
+  });
+
+  const linePercent = activeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
   });
 
   return (
     <MotionPressable
-      activeScale={0.95}
+      activeScale={0.96}
       style={[styles.identityTile, active && styles.identityTileActive]}
       onPress={onPress}
     >
+      <View style={styles.identityTileRow}>
+        <Animated.View
+          style={[
+            styles.identityIconWrapper,
+            active && styles.identityIconWrapperActive,
+            { transform: [{ scale: iconScale }] },
+          ]}
+        >
+          <CharacterIcon
+            characterKey={character.key}
+            size={22}
+            color={active ? '#f5c04a' : '#98d2c8'}
+          />
+        </Animated.View>
+        <View style={styles.identityMeta}>
+          <Text
+            style={[styles.identityRoleText, active && styles.identityRoleTextActive]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {character.role.toUpperCase()}
+          </Text>
+          <Text style={styles.identityNameText} numberOfLines={1} ellipsizeMode="tail">
+            {character.name || character.shortName}
+          </Text>
+        </View>
+        {active && (
+          <MaterialIcons
+            name="check-circle"
+            size={18}
+            color="#f5c04a"
+            style={styles.selectedCheck}
+          />
+        )}
+      </View>
       <Animated.View
         style={[
-          styles.selectedBadge,
+          styles.identityActiveLine,
           {
-            opacity: badgeAnim,
-            transform: [{ scale: badgeScale }],
+            width: linePercent,
+            backgroundColor: '#f5c04a',
           },
         ]}
-      >
-        <Text style={styles.selectedBadgeText}>Selected</Text>
-      </Animated.View>
-      <CharacterIcon
-        characterKey={character.key}
-        size={30}
-        color={active ? '#e8deff' : '#98d2c8'}
-        style={{ marginBottom: 8 }}
       />
-      <Text style={styles.identityTileName}>{character.role.toUpperCase()}</Text>
     </MotionPressable>
+  );
+}
+
+function StyledInput({ style, ...props }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <TextInput
+      style={[styles.settingsInput, focused && styles.settingsInputFocused, style]}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      {...props}
+    />
   );
 }
 
@@ -59,29 +102,7 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
   const patch = value => setDraft(current => ({ ...current, ...value }));
   const identities = [GUEST_CHARACTER, ...STRAW_HAT_CREW];
 
-  const KeyField = ({ label, value, onChangeText, shown, onToggle }) => (
-    <>
-      <Text style={styles.settingsLabel}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TextInput
-          style={[styles.settingsInput, { flex: 1, marginBottom: 0 }]}
-          autoCapitalize="none"
-          secureTextEntry={!shown}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder="••••••••••••••••"
-          placeholderTextColor="#8a8794"
-        />
-        <MotionPressable
-          activeScale={0.9}
-          style={{ marginLeft: -44, zIndex: 2, padding: 8 }}
-          onPress={onToggle}
-        >
-          <MaterialIcons name={shown ? 'visibility' : 'visibility-off'} size={18} color="#cac4d0" />
-        </MotionPressable>
-      </View>
-    </>
-  );
+  const KeyField = ({ label, value, onChangeText, shown, onToggle }) => (\n    <>\n      <Text style={styles.settingsLabel}>{label}</Text>\n      <View style={{ flexDirection: 'row', alignItems: 'center' }}>\n        <StyledInput\n          style={{ flex: 1, marginBottom: 0 }}\n          autoCapitalize=\"none\"\n          secureTextEntry={!shown}\n          value={value}\n          onChangeText={onChangeText}\n          placeholder=\"••••••••••••••••\"\n          placeholderTextColor=\"#8a8794\"\n        />\n        <MotionPressable\n          activeScale={0.9}\n          style={{ marginLeft: -44, zIndex: 2, padding: 8 }}\n          onPress={onToggle}\n        >\n          <MaterialIcons name={shown ? 'visibility' : 'visibility-off'} size={18} color=\"#cac4d0\" />\n        </MotionPressable>\n      </View>\n    </>\n  );
 
   return (
     <View style={styles.settingsScreen}>
@@ -114,7 +135,7 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
           {draft.playAsCharacterKey === 'guest' && (
             <View style={{ marginTop: 14 }}>
               <Text style={styles.settingsLabel}>Guest Display Name</Text>
-              <TextInput style={styles.settingsInput} value={draft.guestName} onChangeText={guestName => patch({ guestName })} placeholder="Player" placeholderTextColor="#8a8794" />
+              <StyledInput value={draft.guestName} onChangeText={guestName => patch({ guestName })} placeholder="Player" placeholderTextColor="#8a8794" />
             </View>
           )}
         </View>
@@ -126,10 +147,10 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
             <Text style={[styles.settingsSectionLabel, { color: '#ffdfa7' }]}>Model Assignments</Text>
           </View>
           <Text style={styles.settingsLabel}>Router Model ID</Text>
-          <TextInput style={styles.settingsInput} autoCapitalize="none" value={draft.routerModel} onChangeText={routerModel => patch({ routerModel })} placeholder="aqua:agnes" placeholderTextColor="#8a8794" />
+          <StyledInput autoCapitalize="none" value={draft.routerModel} onChangeText={routerModel => patch({ routerModel })} placeholder="aqua:agnes" placeholderTextColor="#8a8794" />
           <Text style={styles.settingsHelper}>Selects 1–2 natural responders. A fast, inexpensive model is ideal.</Text>
           <Text style={styles.settingsLabel}>Chat Model ID</Text>
-          <TextInput style={styles.settingsInput} autoCapitalize="none" value={draft.chatModel} onChangeText={chatModel => patch({ chatModel })} placeholder="aqua:agnes" placeholderTextColor="#8a8794" />
+          <StyledInput autoCapitalize="none" value={draft.chatModel} onChangeText={chatModel => patch({ chatModel })} placeholder="aqua:agnes" placeholderTextColor="#8a8794" />
           <Text style={styles.settingsHelper}>Generates dialogue. Prefix with aqua:, groq:, or openai:.</Text>
         </View>
 

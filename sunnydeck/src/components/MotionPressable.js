@@ -8,8 +8,8 @@ export default function MotionPressable({
   delayLongPress,
   disabled,
   style,
-  activeScale = 0.96,
-  activeOpacity = 0.9,
+  activeScale = 0.94,
+  activeOpacity = 0.88,
   ...props
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -20,12 +20,12 @@ export default function MotionPressable({
     Animated.parallel([
       Animated.timing(scale, {
         toValue: activeScale,
-        duration: 100,
+        duration: 80,
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
         toValue: activeOpacity,
-        duration: 100,
+        duration: 80,
         useNativeDriver: true,
       }),
     ]).start();
@@ -36,13 +36,13 @@ export default function MotionPressable({
     Animated.parallel([
       Animated.spring(scale, {
         toValue: 1,
-        friction: 6,
-        tension: 300,
+        stiffness: 400,
+        damping: 18,
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 150,
+        duration: 120,
         useNativeDriver: true,
       }),
     ]).start();

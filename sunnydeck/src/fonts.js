@@ -1,4 +1,8 @@
 import { useFonts } from 'expo-font';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const fontAssets = {
   SpaceGrotesk_400: require('../assets/fonts/SpaceGrotesk_400Regular.ttf'),
@@ -10,7 +14,11 @@ const fontAssets = {
   Roboto_700: require('../assets/fonts/Roboto_700Bold.ttf'),
   RobotoMono_400: require('../assets/fonts/RobotoMono_400Regular.ttf'),
   RobotoMono_500: require('../assets/fonts/RobotoMono_500Medium.ttf'),
-  RobotoMono_600: require('../assets/fonts/RobotoMono_600SemiBold.ttf')
+  RobotoMono_600: require('../assets/fonts/RobotoMono_600SemiBold.ttf'),
+  ...MaterialIcons.font,
+  ...FontAwesome5.font,
+  ...MaterialCommunityIcons.font,
+  ...Ionicons.font,
 };
 
 export function useSunnyDeckFonts() {

@@ -224,31 +224,42 @@ export default StyleSheet.create({
   settingsSectionIcon: { fontSize: 20 },
   settingsSectionLabel: { ...FONT.monoBold, fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' },
 
-  identityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  identityGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
   identityTile: {
-    width: '31%', aspectRatio: 1, borderRadius: 16,
+    width: '48.5%', minHeight: 74, borderRadius: 16,
     backgroundColor: palette.surfaceContainerHigh,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'transparent', padding: 8
+    borderWidth: 1.5, borderColor: palette.outlineVariant,
+    paddingHorizontal: 12, paddingVertical: 10,
+    overflow: 'hidden', justifyContent: 'center'
   },
-  identityTileActive: { borderColor: palette.primaryContainer, ...glow(palette.primary, 0.35, 14) },
-  identityTileEmoji: { fontSize: 26, marginBottom: 6 },
-  identityTileName: { ...FONT.monoMed, color: palette.onSurface, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' },
-  selectedBadge: {
-    position: 'absolute', top: 4, right: 4,
-    backgroundColor: palette.primaryContainer, borderRadius: radius.pill,
-    paddingHorizontal: 6, paddingVertical: 2
+  identityTileActive: {
+    backgroundColor: 'rgba(152, 210, 200, 0.10)',
+    borderColor: palette.secondary,
+    ...glow(palette.secondary, 0.35, 14)
   },
-  selectedBadgeText: { ...FONT.monoBold, color: palette.onPrimaryContainer, fontSize: 7, letterSpacing: 0.4 },
+  identityTileRow: { flexDirection: 'row', alignItems: 'center' },
+  identityIconWrapper: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(152, 210, 200, 0.12)',
+    alignItems: 'center', justifyContent: 'center'
+  },
+  identityIconWrapperActive: { backgroundColor: 'rgba(245, 192, 74, 0.22)' },
+  identityMeta: { flex: 1, marginLeft: 10 },
+  identityRoleText: { ...FONT.monoBold, color: palette.onSurface, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
+  identityRoleTextActive: { color: palette.primary },
+  identityNameText: { ...FONT.body, color: palette.onSurfaceVariant, fontSize: 11, marginTop: 1 },
+  identityActiveLine: { position: 'absolute', bottom: 0, left: 0, height: 3, borderRadius: 2 },
+  selectedCheck: { marginLeft: 4 },
 
   settingsLabel: { ...FONT.mono, color: palette.onSurfaceVariant, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 },
   settingsInput: {
     ...FONT.monoMed, color: palette.onSurface,
     backgroundColor: palette.surfaceContainerLow,
-    borderWidth: 1, borderColor: palette.outlineVariant,
+    borderWidth: 1.5, borderColor: palette.outlineVariant,
     borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 12,
     fontSize: 13, marginBottom: 12
   },
+  settingsInputFocused: { borderColor: palette.secondary, ...glow(palette.secondary, 0.25, 12) },
   settingsHelper: { ...FONT.body, color: palette.onSurfaceVariant, fontSize: 12, lineHeight: 17, marginTop: -6, marginBottom: 10, marginLeft: 4, opacity: 0.8 },
 
   settingsFooter: {
