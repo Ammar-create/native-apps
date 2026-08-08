@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import MotionPressable from './MotionPressable';
 import { useFeedback } from './Feedback';
 import { formatRelativeTime, sessionPreview } from '../utils/sessions';
 import styles from '../styles';
@@ -22,7 +23,7 @@ export default function SessionsDrawer({ visible, sessions, activeSessionId, onC
     if (visible) {
       slide.setValue(-400); fade.setValue(0);
       Animated.parallel([
-        Animated.timing(slide, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.spring(slide, { toValue: 0, friction: 8, tension: 240, useNativeDriver: true }),
         Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true })
       ]).start();
     }
@@ -51,23 +52,24 @@ export default function SessionsDrawer({ visible, sessions, activeSessionId, onC
               <View style={styles.drawerMedallion}><Text style={styles.drawerMedallionText}>📜</Text></View>
               <Text style={styles.drawerTitle}>Sessions</Text>
             </View>
-            <Pressable style={({ pressed }) => [styles.drawerClose, pressed && { backgroundColor: '#35343e' }]} onPress={onClose}>
+            <MotionPressable style={styles.drawerClose} activeScale={0.9} onPress={onClose}>
               <MaterialIcons name="close" size={22} color="#cac4d0" />
-            </Pressable>
+            </MotionPressable>
           </View>
           <ScrollView contentContainerStyle={styles.drawerContent} showsVerticalScrollIndicator={false}>
-            <Pressable style={({ pressed }) => [styles.sessionNewBtn, pressed && { opacity: 0.85 }]} onPress={onNew}>
+            <MotionPressable style={styles.sessionNewBtn} activeScale={0.96} onPress={onNew}>
               <MaterialIcons name="add" size={22} color="#003732" />
               <Text style={styles.sessionNewText}>Start New Session</Text>
-            </Pressable>
+            </MotionPressable>
             <Text style={styles.longPressHint}>Long-press to delete</Text>
             {sorted.map(session => {
               const active = session.id === activeSessionId;
               const count = Math.max(0, (session.messages?.length || 1) - 1);
               return (
-                <Pressable
+                <MotionPressable
                   key={session.id}
-                  style={({ pressed }) => [styles.sessionCard, active && styles.sessionCardActive, pressed && { opacity: 0.85 }]}
+                  activeScale={0.97}
+                  style={[styles.sessionCard, active && styles.sessionCardActive]}
                   onPress={() => onSwitch(session.id)}
                   onLongPress={() => confirmDelete(session)}
                   delayLongPress={450}
@@ -86,7 +88,7 @@ export default function SessionsDrawer({ visible, sessions, activeSessionId, onC
                   </View>
                   <Text style={styles.sessionMeta}>{active ? 'LIVE' : `${count} MESSAGE${count === 1 ? '' : 'S'}`} • {formatRelativeTime(session.updatedAt)}</Text>
                   <Text style={styles.sessionPreview} numberOfLines={2}>{sessionPreview(session)}</Text>
-                </Pressable>
+                </MotionPressable>
               );
             })}
           </ScrollView>

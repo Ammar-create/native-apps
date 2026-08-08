@@ -1,6 +1,8 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import MotionPressable from './MotionPressable';
+import CharacterIcon from './CharacterIcon';
 import styles from '../styles';
 
 export default function TopBar({ identity, onNew, onSessions, onSettings }) {
@@ -8,7 +10,7 @@ export default function TopBar({ identity, onNew, onSessions, onSettings }) {
     <View style={styles.topBar}>
       <View style={styles.topBarLeft}>
         <View style={styles.medallion}>
-          <Text style={styles.medallionText}>{identity.avatar}</Text>
+          <CharacterIcon characterKey={identity.key} size={20} color="#574b7e" />
         </View>
         <View style={styles.topBarTitles}>
           <Text style={styles.topBarTitle} numberOfLines={1}>SUNNY DECK</Text>
@@ -16,15 +18,15 @@ export default function TopBar({ identity, onNew, onSessions, onSettings }) {
         </View>
       </View>
       <View style={styles.topBarActions}>
-        <Pressable style={({ pressed }) => [styles.topBarBtn, pressed && styles.topBarBtnPressed]} onPress={onNew}>
+        <MotionPressable style={styles.topBarBtn} activeScale={0.92} onPress={onNew}>
           <MaterialIcons name="add" size={24} color="#cac4d0" />
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.topBarBtn, pressed && styles.topBarBtnPressed]} onPress={onSessions}>
+        </MotionPressable>
+        <MotionPressable style={styles.topBarBtn} activeScale={0.92} onPress={onSessions}>
           <MaterialIcons name="forum" size={22} color="#cac4d0" />
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.topBarBtn, pressed && styles.topBarBtnPressed]} onPress={onSettings}>
+        </MotionPressable>
+        <MotionPressable style={styles.topBarBtn} activeScale={0.92} onPress={onSettings}>
           <MaterialIcons name="tune" size={22} color="#cac4d0" />
-        </Pressable>
+        </MotionPressable>
       </View>
     </View>
   );

@@ -27,7 +27,7 @@ export default StyleSheet.create({
   // ---------- Root ----------
   safeArea: { flex: 1, backgroundColor: palette.background },
 
-  // ---------- Top App Bar (violet deck.html) ----------
+  // ---------- Top App Bar ----------
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -49,15 +49,15 @@ export default StyleSheet.create({
   topBarTitles: { flex: 1 },
   topBarTitle: { ...FONT.displaySemi, color: palette.onSurface, fontSize: 20, letterSpacing: -0.3 },
   topBarSubtitle: { ...FONT.monoMed, color: palette.primary, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', marginTop: 1 },
-  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   topBarBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   topBarBtnPressed: { backgroundColor: palette.surfaceVariant },
 
   // ---------- Target Rail (filter chips) ----------
   targetBar: { backgroundColor: palette.surfaceDim, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(72,69,78,0.25)' },
-  targetRail: { paddingHorizontal: 16, gap: 10 },
+  targetRail: { paddingHorizontal: 16 },
   targetChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: palette.surfaceContainerHighest,
     borderWidth: 1, borderColor: palette.outlineVariant,
     borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 9,
@@ -68,8 +68,9 @@ export default StyleSheet.create({
     borderColor: 'rgba(152,210,200,0.35)',
     ...glow(palette.secondary, 0.35, 18)
   },
+  targetCheckSlot: { overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   targetChipIcon: { fontSize: 16 },
-  targetChipText: { ...FONT.monoMed, color: palette.onSurface, fontSize: 12, letterSpacing: 0.6, textTransform: 'uppercase' },
+  targetChipText: { ...FONT.monoMed, color: palette.onSurface, fontSize: 12, letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: 6 },
   targetChipTextActive: { color: palette.onSecondaryContainer },
   targetCheck: { fontSize: 15, color: palette.onSecondaryContainer },
 
@@ -140,15 +141,24 @@ export default StyleSheet.create({
   sendIcon: { fontSize: 20, color: palette.onPrimaryContainer },
 
   // ---------- Bottom Navigation ----------
-  bottomNav: {
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+  bottomNavContainer: {
+    position: 'relative',
     backgroundColor: palette.surfaceContainerLowest,
     borderTopWidth: 1, borderTopColor: palette.outlineVariant,
     borderTopLeftRadius: radius.nav, borderTopRightRadius: radius.nav,
-    paddingTop: 8, paddingBottom: 10
+    paddingTop: 8, paddingBottom: 10, paddingHorizontal: 16
   },
-  navItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 4 },
-  navItemActive: { backgroundColor: palette.primaryContainer, borderRadius: radius.pill, paddingHorizontal: 24, paddingVertical: 4, ...glow(palette.primary, 0.35, 14) },
+  bottomNavTrack: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', position: 'relative'
+  },
+  navActiveIndicator: {
+    position: 'absolute',
+    top: 0, bottom: 0, width: '48%',
+    backgroundColor: palette.primaryContainer,
+    borderRadius: radius.pill,
+    ...glow(palette.primary, 0.35, 14)
+  },
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 6, zIndex: 2 },
   navIcon: { fontSize: 22 },
   navIconActive: { color: palette.onPrimaryContainer },
   navIconInactive: { color: palette.onSurfaceVariant },
@@ -156,7 +166,7 @@ export default StyleSheet.create({
   navLabelActive: { color: palette.onPrimaryContainer },
   navLabelInactive: { color: palette.onSurfaceVariant },
 
-  // ---------- Sessions Drawer (Grand Line Teal layout, violet colors) ----------
+  // ---------- Sessions Drawer ----------
   drawerScrim: { flex: 1, backgroundColor: 'rgba(10,9,18,0.66)' },
   drawerPanel: {
     position: 'absolute', left: 0, top: 0, bottom: 0, width: '88%', maxWidth: 360,
@@ -183,7 +193,7 @@ export default StyleSheet.create({
   sessionCard: {
     borderRadius: radius.card, padding: 20,
     backgroundColor: palette.surfaceContainer,
-    borderWidth: 1, borderColor: 'transparent',
+    borderWidth: 2, borderColor: 'transparent',
     marginBottom: 12
   },
   sessionCardActive: { borderColor: palette.secondary, ...glow(palette.secondary, 0.3, 18) },
@@ -201,7 +211,7 @@ export default StyleSheet.create({
   sessionMeta: { ...FONT.monoMed, color: palette.secondaryFixed, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 10 },
   sessionPreview: { ...FONT.body, color: palette.onSurfaceVariant, fontSize: 13, lineHeight: 18, marginTop: 6 },
 
-  // ---------- Settings Screen (violet settings.html layout) ----------
+  // ---------- Settings Screen ----------
   settingsScreen: { flex: 1, backgroundColor: palette.background },
   settingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 18 },
   settingsTitle: { ...FONT.displaySemi, color: palette.primary, fontSize: 26, letterSpacing: -0.5 },
@@ -219,9 +229,9 @@ export default StyleSheet.create({
     width: '31%', aspectRatio: 1, borderRadius: 16,
     backgroundColor: palette.surfaceContainerHigh,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'transparent', padding: 8
+    borderWidth: 2, borderColor: 'transparent', padding: 8
   },
-  identityTileActive: { borderWidth: 2, borderColor: palette.primaryContainer, ...glow(palette.primary, 0.35, 14) },
+  identityTileActive: { borderColor: palette.primaryContainer, ...glow(palette.primary, 0.35, 14) },
   identityTileEmoji: { fontSize: 26, marginBottom: 6 },
   identityTileName: { ...FONT.monoMed, color: palette.onSurface, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' },
   selectedBadge: {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, StatusBar, View } from 'react-native';
+import { Animated, Easing, SafeAreaView, StatusBar, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeedbackProvider, { useFeedback } from './src/components/Feedback';
 import TopBar from './src/components/TopBar';
@@ -42,9 +42,20 @@ function AppContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [typingName, setTypingName] = useState(null);
   const [sessionsDrawer, setSessionsDrawer] = useState(false);
+
+  const screenAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
   const { fontsLoaded } = useSunnyDeckFonts();
   const { showToast } = useFeedback();
+
+  useEffect(() => {
+    Animated.timing(screenAnim, {
+      toValue: activeTab === 'settings' ? 1 : 0,
+      duration: 240,
+      easing: Easing.bezier(0.23, 1, 0.32, 1),
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
 
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const messages = activeSession?.messages || [];
@@ -126,6 +137,7 @@ function AppContent() {
       setSettings(clean); setTargetChar(current => current?.key === clean.playAsCharacterKey ? null : current);
       await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(clean));
       showToast('Settings saved successfully.', 'success');
+      setActiveTab('deck');
     } catch (_error) { showToast('Could not save settings.', 'error'); }
   };
 
@@ -154,7 +166,7 @@ function AppContent() {
     const text = inputText.trim();
     if (!text || isBusy || !activeSession) return;
     setInputText(''); setIsBusy(true);
-    const userMessage = { id: `msg_${Date.now()}_user`, kind: 'dialogue', speaker: identity.name, role: identity.role, avatar: identity.avatar, characterKey: identity.key, isPlayer: true, text, shout: isShout, target: targetChar?.name || null, timestamp: Date.now() };
+    const userMessage = { id: `msg_${Date.now()}_user`, kind: 'dialogue', speaker: identity.name, role: identity.role, characterKey: identity.key, isPlayer: true, text, shout: isShout, target: targetChar?.name || null, timestamp: Date.now() };
     setIsShout(false);
     setSessions(current => {
       const next = current.map(session => session.id !== activeSessionId ? session : { ...session, title: session.title === 'New Deck Chat' ? titleFromMessage(text) : session.title, updatedAt: Date.now(), messages: [...session.messages, userMessage] });
@@ -170,7 +182,7 @@ function AppContent() {
         try { reply = await getCharacterReply(character, text, already); }
         catch (error) { reply = `[Response error: ${error.message}]`; }
         finally { setTypingName(null); }
-        updateActiveMessages(current => [...current, { id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`, kind: 'dialogue', speaker: character.name, role: character.role, avatar: character.avatar, characterKey: character.key, isPlayer: false, text: reply, timestamp: Date.now() }]);
+        updateActiveMessages(current => [...current, { id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`, kind: 'dialogue', speaker: character.name, role: character.role, characterKey: character.key, isPlayer: false, text: reply, timestamp: Date.now() }]);
         already.push(character.name);
       }
     } finally { setTypingName(null); setIsBusy(false); }
@@ -178,21 +190,42 @@ function AppContent() {
 
   if (!loaded || !fontsLoaded) return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="light-content" backgroundColor="#13121c" /></SafeAreaView>;
 
+  const deckOpacity = screenAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const deckScale = screenAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] });
+
+  const settingsTranslateY = screenAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+  const settingsOpacity = screenAnim;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#13121c" />
-      {activeTab === 'deck' ? (
-        <>
+      <View style={{ flex: 1, position: 'relative' }}>
+        <Animated.View
+          style={[
+            { flex: 1, position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+            { opacity: deckOpacity, transform: [{ scale: deckScale }] },
+          ]}
+          pointerEvents={activeTab === 'deck' ? 'auto' : 'none'}
+        >
           <TopBar identity={identity} onNew={startNewSession} onSessions={() => setSessionsDrawer(true)} onSettings={() => setActiveTab('settings')} />
           <TargetBar characters={aiCrew} target={targetChar} onSelect={setTargetChar} />
           <View style={{ flex: 1 }}>
             <MessageList messages={messages} typingName={typingName} listRef={flatListRef} />
           </View>
           <ChatInput identity={identity} target={targetChar} inputText={inputText} onChangeText={setInputText} isShout={isShout} onToggleShout={() => setIsShout(value => !value)} isBusy={isBusy} onSend={handleSend} />
-        </>
-      ) : (
-        <SettingsScreen visible={activeTab === 'settings'} settings={settings} onSave={saveSettings} onClose={() => setActiveTab('deck')} />
-      )}
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            { flex: 1, position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+            { opacity: settingsOpacity, transform: [{ translateY: settingsTranslateY }] },
+          ]}
+          pointerEvents={activeTab === 'settings' ? 'auto' : 'none'}
+        >
+          <SettingsScreen visible={activeTab === 'settings'} settings={settings} onSave={saveSettings} onClose={() => setActiveTab('deck')} />
+        </Animated.View>
+      </View>
+
       <BottomNav active={activeTab} onChange={setActiveTab} />
       <SessionsDrawer visible={sessionsDrawer} sessions={sessions} activeSessionId={activeSessionId} onClose={() => setSessionsDrawer(false)} onNew={startNewSession} onSwitch={switchSession} onDelete={deleteSession} />
     </SafeAreaView>

@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
+    "@expo/vector-icons": "^14.0.3",
     "@react-native-async-storage/async-storage": "1.23.1",
     "abort-controller": "^3.0.0",
     "event-target-shim": "^5.0.1",
     "expo": "~51.0.0",
+    "expo-font": "~12.0.10",
     "expo-haptics": "~13.0.1",
     "expo-linear-gradient": "~13.0.2",
     "expo-status-bar": "~1.12.1",

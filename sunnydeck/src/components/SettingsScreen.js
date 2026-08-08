@@ -1,12 +1,60 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import MotionPressable from './MotionPressable';
+import CharacterIcon from './CharacterIcon';
 import { GUEST_CHARACTER, STRAW_HAT_CREW } from '../data/characters';
 import styles from '../styles';
+
+function IdentityTile({ character, active, onPress }) {
+  const badgeAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(badgeAnim, {
+      toValue: active ? 1 : 0,
+      friction: 7,
+      tension: 260,
+      useNativeDriver: true,
+    }).start();
+  }, [active]);
+
+  const badgeScale = badgeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.8, 1],
+  });
+
+  return (
+    <MotionPressable
+      activeScale={0.95}
+      style={[styles.identityTile, active && styles.identityTileActive]}
+      onPress={onPress}
+    >
+      <Animated.View
+        style={[
+          styles.selectedBadge,
+          {
+            opacity: badgeAnim,
+            transform: [{ scale: badgeScale }],
+          },
+        ]}
+      >
+        <Text style={styles.selectedBadgeText}>Selected</Text>
+      </Animated.View>
+      <CharacterIcon
+        characterKey={character.key}
+        size={30}
+        color={active ? '#e8deff' : '#98d2c8'}
+        style={{ marginBottom: 8 }}
+      />
+      <Text style={styles.identityTileName}>{character.role.toUpperCase()}</Text>
+    </MotionPressable>
+  );
+}
 
 export default function SettingsScreen({ visible, settings, onSave, onClose }) {
   const [draft, setDraft] = useState(settings);
   const [showKeys, setShowKeys] = useState({ aqua: false, groq: false, openai: false });
+
   useEffect(() => { if (visible) setDraft(settings); }, [visible, settings]);
   const patch = value => setDraft(current => ({ ...current, ...value }));
   const identities = [GUEST_CHARACTER, ...STRAW_HAT_CREW];
@@ -15,10 +63,22 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
     <>
       <Text style={styles.settingsLabel}>{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TextInput style={[styles.settingsInput, { flex: 1, marginBottom: 0 }]} autoCapitalize="none" secureTextEntry={!shown} value={value} onChangeText={onChangeText} placeholder="••••••••••••••••" placeholderTextColor="#8a8794" />
-        <Pressable style={({ pressed }) => [{ marginLeft: -44, zIndex: 2, padding: 8 }, pressed && { opacity: 0.6 }]} onPress={onToggle}>
+        <TextInput
+          style={[styles.settingsInput, { flex: 1, marginBottom: 0 }]}
+          autoCapitalize="none"
+          secureTextEntry={!shown}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder="••••••••••••••••"
+          placeholderTextColor="#8a8794"
+        />
+        <MotionPressable
+          activeScale={0.9}
+          style={{ marginLeft: -44, zIndex: 2, padding: 8 }}
+          onPress={onToggle}
+        >
           <MaterialIcons name={shown ? 'visibility' : 'visibility-off'} size={18} color="#cac4d0" />
-        </Pressable>
+        </MotionPressable>
       </View>
     </>
   );
@@ -27,9 +87,9 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
     <View style={styles.settingsScreen}>
       <View style={styles.settingsHeader}>
         <Text style={styles.settingsTitle}>Sunny Settings</Text>
-        <Pressable style={({ pressed }) => [styles.settingsClose, pressed && { backgroundColor: '#35343e' }]} onPress={onClose}>
+        <MotionPressable style={styles.settingsClose} activeScale={0.9} onPress={onClose}>
           <MaterialIcons name="close" size={24} color="#cac4d0" />
-        </Pressable>
+        </MotionPressable>
       </View>
       <ScrollView contentContainerStyle={styles.settingsScroll} keyboardShouldPersistTaps="handled">
         {/* Roleplay Identity */}
@@ -42,13 +102,12 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
             {identities.map(character => {
               const active = draft.playAsCharacterKey === character.key;
               return (
-                <Pressable key={character.key} style={({ pressed }) => [styles.identityTile, active && styles.identityTileActive, pressed && { opacity: 0.8 }]} onPress={() => patch({ playAsCharacterKey: character.key })}>
-                  {active && (
-                    <View style={styles.selectedBadge}><Text style={styles.selectedBadgeText}>Selected</Text></View>
-                  )}
-                  <Text style={styles.identityTileEmoji}>{character.avatar}</Text>
-                  <Text style={styles.identityTileName}>{character.role.toUpperCase()}</Text>
-                </Pressable>
+                <IdentityTile
+                  key={character.key}
+                  character={character}
+                  active={active}
+                  onPress={() => patch({ playAsCharacterKey: character.key })}
+                />
               );
             })}
           </View>
@@ -88,13 +147,13 @@ export default function SettingsScreen({ visible, settings, onSave, onClose }) {
         </View>
       </ScrollView>
       <View style={styles.settingsFooter}>
-        <Pressable style={({ pressed }) => [styles.settingsCancelBtn, pressed && { backgroundColor: '#35343e' }]} onPress={onClose}>
+        <MotionPressable style={styles.settingsCancelBtn} activeScale={0.96} onPress={onClose}>
           <Text style={styles.settingsCancelText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.settingsSaveBtn, pressed && { opacity: 0.85 }]} onPress={() => onSave(draft)}>
+        </MotionPressable>
+        <MotionPressable style={styles.settingsSaveBtn} activeScale={0.96} onPress={() => onSave(draft)}>
           <Text style={styles.settingsSaveText}>Save Settings</Text>
           <MaterialIcons name="check-circle" size={16} color="#574b7e" />
-        </Pressable>
+        </MotionPressable>
       </View>
     </View>
   );
